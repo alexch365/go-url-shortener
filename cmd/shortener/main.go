@@ -31,13 +31,13 @@ func mainPage(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		urlId := randomString(8)
-		storage.urls[urlId] = string(body)
+		urlID := randomString(8)
+		storage.urls[urlID] = string(body)
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("http://localhost:8080/" + urlId))
+		w.Write([]byte("http://localhost:8080/" + urlID))
     } else {
-		urlId := req.PathValue("id")
-		url := storage.urls[urlId]
+		urlID := req.PathValue("id")
+		url := storage.urls[urlID]
 		if url == "" {
 			return
 		}
