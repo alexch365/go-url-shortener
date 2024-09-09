@@ -1,9 +1,9 @@
 package main
 
 import (
-    "io"
-    "net/http"
+	"io"
 	"math/rand"
+	"net/http"
 	"strings"
 )
 
@@ -11,7 +11,7 @@ type URLShortener struct {
 	urls map[string]string
 }
 
-var storage = URLShortener{}
+var storage = URLShortener{ urls: make(map[string]string) }
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
@@ -24,35 +24,35 @@ func randomString(n int) string {
     return sb.String()
 }
 
-func mainPage(w http.ResponseWriter, req *http.Request) {
-    if req.Method == http.MethodPost {
-		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			return
-		}
-
-		urlID := randomString(8)
-		storage.urls[urlID] = string(body)
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("http://localhost:8080/" + urlID))
-    } else {
-		urlID := req.PathValue("id")
-		url := storage.urls[urlID]
-		if url == "" {
-			return
-		}
-
-        w.Header().Set("Location", url)
-		w.WriteHeader(http.StatusTemporaryRedirect)
+func SaveURLHandler(w http.ResponseWriter, req *http.Request) {
+    body, err := io.ReadAll(req.Body)
+    if err != nil || len(body) == 0 {
+        return
     }
+
+    urlID := randomString(8)
+    storage.urls[urlID] = string(body)
+    w.WriteHeader(http.StatusCreated)
+    w.Write([]byte("http://localhost:8080/" + urlID))
+}
+
+func GetURLHandler(w http.ResponseWriter, req *http.Request) {
+    urlID := strings.TrimPrefix(req.URL.Path, "/")
+    url := storage.urls[urlID]
+    if url == "" {
+        w.WriteHeader(http.StatusNotFound)
+        return
+    }
+
+    w.Header().Set("Location", url)
+    w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
 func main() {
     mux := http.NewServeMux()
-	storage.urls = make(map[string]string)
 
-    mux.HandleFunc(`/{id}`, mainPage)
-    mux.HandleFunc("/", mainPage)
+    mux.HandleFunc(`/{id}`, GetURLHandler)
+    mux.HandleFunc("/", SaveURLHandler)
 
     err := http.ListenAndServe(`:8080`, mux)
     if err != nil {
