@@ -18,12 +18,12 @@ func TestSaveURLHandler(t *testing.T) {
 	}
 	tests := []struct {
 		name   string
-		reqUrl string
+		reqURL string
 		want   want
 	}{
 		{
 			name:   "with created status",
-			reqUrl: "practicum.yandex.ru",
+			reqURL: "practicum.yandex.ru",
 			want: want{
 				code:     201,
 				response: "http://localhost:8080/.{8}$",
@@ -31,7 +31,7 @@ func TestSaveURLHandler(t *testing.T) {
 		},
 		{
 			name:   "without request body",
-			reqUrl: "",
+			reqURL: "",
 			want: want{
 				code:     200,
 				response: "",
@@ -40,7 +40,7 @@ func TestSaveURLHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.reqUrl))
+			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.reqURL))
 			w := httptest.NewRecorder()
 			SaveURLHandler(w, request)
 
