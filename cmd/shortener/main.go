@@ -1,12 +1,14 @@
 package main
 
 import (
+	"flag"
 	"io"
 	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/alexch365/go-url-shortener/cmd/shortener/config"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -17,6 +19,11 @@ type urlStorage struct {
 
 var storage = urlStorage{
     urls: map[string]string{},
+}
+
+var params = config.Config{
+    ServerAddress: config.NetAddress{Host: "localhost", Port: 8080},
+    BaseURL: "http://localhost:8080/",
 }
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -47,7 +54,7 @@ func storeURLHandle(w http.ResponseWriter, req *http.Request) {
     urlID := randomString(8)
     storage.urls[urlID] = urlStr
     w.WriteHeader(http.StatusCreated)
-    w.Write([]byte("http://localhost:8080/" + urlID))
+    w.Write([]byte(params.BaseURL + urlID))
 }
 
 func restoreURLHandle(w http.ResponseWriter, req *http.Request) {
@@ -80,8 +87,15 @@ func router() chi.Router {
     return r
 }
 
+func parseFlags() {
+    flag.Var(&params.ServerAddress, "a", "Server address host:port")
+    flag.StringVar(&params.BaseURL, "b", params.BaseURL, "Base for short URL")
+    flag.Parse()
+}
+
 func main() {
-    err := http.ListenAndServe(`:8080`, router())
+    parseFlags()
+    err := http.ListenAndServe(params.ServerAddress.String(), router())
     if err != nil {
         panic(err)
     }
