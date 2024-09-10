@@ -12,6 +12,7 @@ import (
 )
 
 func TestStoreURLHandle(t *testing.T) {
+	setDefaults()
 	tests := []struct {
 		name string
 		body   string
