@@ -51,13 +51,15 @@ func storeURLHandle(w http.ResponseWriter, req *http.Request) {
 }
 
 func restoreURLHandle(w http.ResponseWriter, req *http.Request) {
-    urlID := chi.URLParam(req, "id")
+    urlID := strings.TrimPrefix(req.URL.Path, "/")
     url := storage.urls[urlID]
     if url == "" {
         http.Error(w, "The specified ID is not found", http.StatusNotFound)
         return
     }
 
+    w.Header().Set("Location", url)
+    // http.Redirect(w, req, url, http.StatusTemporaryRedirect)
     middleware.SetHeader("Location", url)
     w.WriteHeader(http.StatusTemporaryRedirect)
 }

@@ -11,24 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func testRequest(t *testing.T, ts *httptest.Server, method, path string, body string) (*http.Response, string) {
-	req, err := http.NewRequest(method, ts.URL+path, strings.NewReader(body))
-	require.NoError(t, err)
-
-	resp, err := ts.Client().Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-
-	return resp, string(respBody)
-}
-
 func TestStoreURLHandle(t *testing.T) {
-	ts := httptest.NewServer(router())
-    defer ts.Close()
-
 	tests := []struct {
 		name string
 		body   string
@@ -41,17 +24,22 @@ func TestStoreURLHandle(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, body := testRequest(t, ts, "POST", "/", tt.body)
+			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
+			rec := httptest.NewRecorder()
+			storeURLHandle(rec, request)
+			resp := rec.Result()
+			defer resp.Body.Close()
+
+			resBody, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+
 			assert.Equal(t, tt.status, resp.StatusCode)
-			assert.Regexp(t, tt.want, body)
+			assert.Regexp(t, tt.want, string(resBody))
 		})
     }
 }
 
 func TestRestoreURLHandle(t *testing.T) {
-	ts := httptest.NewServer(router())
-    defer ts.Close()
-
 	urlID := randomString(8)
 	storage.urls[urlID] = "https://practicum.yandex.ru"
 
@@ -65,7 +53,14 @@ func TestRestoreURLHandle(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, _ := testRequest(t, ts, "GET", "/"+tt.id, "")
+			request := httptest.NewRequest(http.MethodGet, "/"+tt.id, nil)
+			rec := httptest.NewRecorder()
+			restoreURLHandle(rec, request)
+			resp := rec.Result()
+			defer resp.Body.Close()
+
+			_, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
 			assert.Equal(t, tt.status, resp.StatusCode)
 		})
 	}
