@@ -12,12 +12,17 @@ type NetAddress struct {
 }
 
 type Config struct {
-	ServerAddress NetAddress
-	BaseURL string
+	ServerAddress string 	`env:"SERVER_ADDRESS"` // struct not supported by env
+	BaseURL string 			`env:"BASE_URL"`
+}
+
+var Defaults = Config{
+	ServerAddress: "localhost:8080", //NetAddress{Host: "localhost", Port: 8080},
+    BaseURL: "http://localhost:8080",
 }
 
 func (addr *NetAddress) String() string {
-    return addr.Host + ":" + strconv.Itoa(addr.Port)
+    return strings.Join([]string{addr.Host, strconv.Itoa(addr.Port)}, ":")
 }
 
 func (addr *NetAddress) Set(s string) error {

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/alexch365/go-url-shortener/cmd/shortener/config"
+	"github.com/caarlos0/env"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -21,10 +22,7 @@ var storage = urlStorage{
     urls: map[string]string{},
 }
 
-var params = config.Config{
-    ServerAddress: config.NetAddress{Host: "localhost", Port: 8080},
-    BaseURL: "http://localhost:8080",
-}
+var params = config.Config{}
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
@@ -88,14 +86,32 @@ func router() chi.Router {
 }
 
 func parseFlags() {
-    flag.Var(&params.ServerAddress, "a", "Server address host:port")
-    flag.StringVar(&params.BaseURL, "b", params.BaseURL, "Base for short URL")
+    // flag.Var(&params.ServerAddress, "a", "Server address host:port")
+    flag.StringVar(&params.ServerAddress, "a", "", "Server address host:port")
+    flag.StringVar(&params.BaseURL, "b", "", "Base for short URL")
     flag.Parse()
+}
+
+func setDefaults() {
+    if params.ServerAddress == "" {
+        params.ServerAddress = config.Defaults.ServerAddress
+    }
+    if params.BaseURL == "" {
+        params.BaseURL = config.Defaults.BaseURL
+    }
 }
 
 func main() {
     parseFlags()
-    err := http.ListenAndServe(params.ServerAddress.String(), router())
+
+    err := env.Parse(&params)
+    if err != nil {
+        panic(err)
+    }
+    
+    setDefaults()
+
+    err = http.ListenAndServe(params.ServerAddress, router())
     if err != nil {
         panic(err)
     }
