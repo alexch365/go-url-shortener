@@ -23,7 +23,7 @@ var storage = urlStorage{
 
 var params = config.Config{
     ServerAddress: config.NetAddress{Host: "localhost", Port: 8080},
-    BaseURL: "http://localhost:8080/",
+    BaseURL: "http://localhost:8080",
 }
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -54,7 +54,7 @@ func storeURLHandle(w http.ResponseWriter, req *http.Request) {
     urlID := randomString(8)
     storage.urls[urlID] = urlStr
     w.WriteHeader(http.StatusCreated)
-    w.Write([]byte(params.BaseURL + urlID))
+    w.Write([]byte(params.BaseURL + "/" + urlID))
 }
 
 func restoreURLHandle(w http.ResponseWriter, req *http.Request) {
