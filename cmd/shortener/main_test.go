@@ -11,91 +11,62 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSaveURLHandler(t *testing.T) {
-	type want struct {
-		code     int
-		response string
-	}
-	tests := []struct {
-		name   string
-		reqURL string
-		want   want
-	}{
-		{
-			name:   "with created status",
-			reqURL: "practicum.yandex.ru",
-			want: want{
-				code:     201,
-				response: "http://localhost:8080/.{8}$",
-			},
-		},
-		{
-			name:   "without request body",
-			reqURL: "",
-			want: want{
-				code:     200,
-				response: "",
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.reqURL))
-			w := httptest.NewRecorder()
-			SaveURLHandler(w, request)
+func testRequest(t *testing.T, ts *httptest.Server, method, path string, body string) (*http.Response, string) {
+	req, err := http.NewRequest(method, ts.URL+path, strings.NewReader(body))
+	require.NoError(t, err)
 
-			res := w.Result()
+	resp, err := ts.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
 
-			defer res.Body.Close()
-			assert.Equal(t, tt.want.code, res.StatusCode)
+	respBody, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
 
-			resBody, err := io.ReadAll(res.Body)
-			require.NoError(t, err)
-			assert.Regexp(t, tt.want.response, string(resBody))
-		})
-	}
+	return resp, string(respBody)
 }
 
-func TestGetURLHandler(t *testing.T) {
-	urlID := randomString(8)
-	storage.urls[urlID] = "practicum.yandex.ru"
+func TestStoreURLHandle(t *testing.T) {
+	ts := httptest.NewServer(router())
+    defer ts.Close()
 
-	type want struct {
-		code     int
-	}
 	tests := []struct {
 		name string
-		reqID string
-		want want
-	}{
-		{
-			name:   "when ID is in storage",
-			reqID: urlID,
-			want: want{
-				code: 307,
-			},
-		},
-		{
-			name:   "when ID is not in storage",
-			reqID: randomString(8),
-			want: want{
-				code: 404,
-			},
-		},
+		body   string
+        want   string
+        status int
+    }{
+		{ "with valid URL", "https://practicum.yandex.ru", "http://localhost:8080/.{8}$", http.StatusCreated },
+		{ "with invalid URL", "https//practicum.yandex.ru", "", http.StatusBadRequest },
+		{ "with empty URL", "", "", http.StatusBadRequest },
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, "/" + tt.reqID, nil)
-			w := httptest.NewRecorder()
-			GetURLHandler(w, request)
+			resp, body := testRequest(t, ts, "POST", "/", tt.body)
+			assert.Equal(t, tt.status, resp.StatusCode)
+			assert.Regexp(t, tt.want, body)
+		})
+    }
+}
 
-			res := w.Result()
+func TestRestoreURLHandle(t *testing.T) {
+	ts := httptest.NewServer(router())
+    defer ts.Close()
 
-			defer res.Body.Close()
-			assert.Equal(t, tt.want.code, res.StatusCode)
+	urlID := randomString(8)
+	storage.urls[urlID] = "https://practicum.yandex.ru"
 
-			_, err := io.ReadAll(res.Body)
-			require.NoError(t, err)
+	tests := []struct {
+		name string
+		id string
+		status int
+	}{
+		{ "with stored ID", urlID, http.StatusTemporaryRedirect },
+		{ "with random ID", randomString(8), http.StatusNotFound },
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, _ := testRequest(t, ts, "GET", "/"+tt.id, "")
+			assert.Equal(t, tt.status, resp.StatusCode)
 		})
 	}
 }
