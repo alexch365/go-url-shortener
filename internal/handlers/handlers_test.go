@@ -32,9 +32,7 @@ func TestShorten(t *testing.T) {
 			rec := httptest.NewRecorder()
 			Shorten(rec, request)
 			resp := rec.Result()
-			defer func(Body io.ReadCloser) {
-				_ = Body.Close()
-			}(resp.Body)
+			defer resp.Body.Close()
 
 			resBody, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
@@ -63,9 +61,7 @@ func TestExpand(t *testing.T) {
 			rec := httptest.NewRecorder()
 			Expand(rec, request)
 			resp := rec.Result()
-			defer func(Body io.ReadCloser) {
-				_ = Body.Close()
-			}(resp.Body)
+			defer resp.Body.Close()
 
 			_, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)

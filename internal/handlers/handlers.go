@@ -35,12 +35,12 @@ func Shorten(w http.ResponseWriter, req *http.Request) {
 
 func Expand(w http.ResponseWriter, req *http.Request) {
 	urlID := strings.TrimPrefix(req.URL.Path, "/")
-	storedUrl := storage.Get(urlID)
-	if storedUrl == "" {
+	storedURL := storage.Get(urlID)
+	if storedURL == "" {
 		http.Error(w, "The specified ID is not found", http.StatusNotFound)
 		return
 	}
 
-	w.Header().Set("Location", storedUrl)
+	w.Header().Set("Location", storedURL)
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
