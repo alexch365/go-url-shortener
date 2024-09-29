@@ -4,23 +4,19 @@ import (
 	"flag"
 	"github.com/alexch365/go-url-shortener/internal/config"
 	"github.com/alexch365/go-url-shortener/internal/handlers"
+	"github.com/alexch365/go-url-shortener/internal/logger"
 	"github.com/caarlos0/env"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"net/http"
 )
 
 func router() chi.Router {
 	r := chi.NewRouter()
-	r.Use(
-		middleware.Logger,
-		middleware.Recoverer,
-	)
 
 	r.Route("/", func(r chi.Router) {
-		r.Post("/", handlers.Shorten)
+		r.Post("/", logger.RequestLogger(handlers.Shorten))
 		r.Route("/{id}", func(r chi.Router) {
-			r.Get("/", handlers.Expand)
+			r.Get("/", logger.RequestLogger(handlers.Expand))
 		})
 	})
 	return r
@@ -38,6 +34,10 @@ func Run() {
 	}
 
 	config.SetDefaults()
+
+	if err := logger.Initialize(); err != nil {
+		panic(err)
+	}
 
 	err = http.ListenAndServe(config.Current.ServerAddress, router())
 	if err != nil {

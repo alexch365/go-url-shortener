@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"github.com/alexch365/go-url-shortener/internal/config"
 	"github.com/alexch365/go-url-shortener/internal/storage"
 	"github.com/alexch365/go-url-shortener/internal/util"
@@ -20,7 +21,7 @@ func Shorten(w http.ResponseWriter, req *http.Request) {
 	urlStr := string(body)
 	_, err = url.ParseRequestURI(urlStr)
 	if err != nil {
-		http.Error(w, "The specified URL is not valid", http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("Invalid URL: %s", urlStr), http.StatusBadRequest)
 		return
 	}
 
@@ -37,7 +38,7 @@ func Expand(w http.ResponseWriter, req *http.Request) {
 	urlID := strings.TrimPrefix(req.URL.Path, "/")
 	storedURL := storage.Get(urlID)
 	if storedURL == "" {
-		http.Error(w, "The specified ID is not found", http.StatusNotFound)
+		http.Error(w, fmt.Sprintf("Invalid ID: %s", urlID), http.StatusNotFound)
 		return
 	}
 
