@@ -54,6 +54,7 @@ func ShortenAPI(w http.ResponseWriter, req *http.Request) {
 
 	urlID := util.RandomString(8)
 	storage.Save(urlID, urls.URL)
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	err := json.NewEncoder(w).Encode(response{config.Current.BaseURL + "/" + urlID})
 	if err != nil {
