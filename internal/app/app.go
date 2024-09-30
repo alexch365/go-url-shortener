@@ -15,6 +15,7 @@ func router() chi.Router {
 
 	r.Route("/", func(r chi.Router) {
 		r.Post("/", logger.RequestLogger(handlers.Shorten))
+		r.Post("/api/shorten", logger.RequestLogger(handlers.ShortenAPI))
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", logger.RequestLogger(handlers.Expand))
 		})
