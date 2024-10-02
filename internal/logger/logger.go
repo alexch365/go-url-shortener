@@ -8,15 +8,17 @@ import (
 
 var Log *zap.SugaredLogger
 
-type responseData struct {
-	status int
-	size   int
-}
+type (
+	responseData struct {
+		status int
+		size   int
+	}
 
-type loggingResponseWriter struct {
-	http.ResponseWriter
-	*responseData
-}
+	loggingResponseWriter struct {
+		http.ResponseWriter
+		*responseData
+	}
+)
 
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	size, err := r.ResponseWriter.Write(b)
@@ -41,13 +43,13 @@ func Initialize() error {
 	return nil
 }
 
-func RequestLogger(origHandlerFunc http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
 		lrw := &loggingResponseWriter{w, &responseData{}}
 
-		origHandlerFunc(lrw, r)
+		next.ServeHTTP(lrw, r)
 
 		Log.Infow("user request",
 			"uri", r.RequestURI,
@@ -56,5 +58,5 @@ func RequestLogger(origHandlerFunc http.HandlerFunc) http.HandlerFunc {
 			"status", lrw.status,
 			"size", lrw.size,
 		)
-	}
+	})
 }

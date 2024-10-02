@@ -12,12 +12,14 @@ import (
 
 func router() chi.Router {
 	r := chi.NewRouter()
+	r.Use(logger.Middleware)
+	r.Use(gzipMiddleware)
 
 	r.Route("/", func(r chi.Router) {
-		r.Post("/", logger.RequestLogger(handlers.Shorten))
-		r.Post("/api/shorten", logger.RequestLogger(handlers.ShortenAPI))
+		r.Post("/", handlers.Shorten)
+		r.Post("/api/shorten", handlers.ShortenAPI)
 		r.Route("/{id}", func(r chi.Router) {
-			r.Get("/", logger.RequestLogger(handlers.Expand))
+			r.Get("/", handlers.Expand)
 		})
 	})
 	return r
