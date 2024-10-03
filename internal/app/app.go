@@ -5,6 +5,7 @@ import (
 	"github.com/alexch365/go-url-shortener/internal/config"
 	"github.com/alexch365/go-url-shortener/internal/handlers"
 	"github.com/alexch365/go-url-shortener/internal/logger"
+	"github.com/alexch365/go-url-shortener/internal/storage"
 	"github.com/caarlos0/env"
 	"github.com/go-chi/chi/v5"
 	"net/http"
@@ -26,13 +27,12 @@ func router() chi.Router {
 }
 
 func Run() {
-	// flag.Var(&params.ServerAddress, "a", "Server address host:port")
 	flag.StringVar(&config.Current.ServerAddress, "a", "", "Server address host:port")
 	flag.StringVar(&config.Current.BaseURL, "b", "", "Base for short URL")
+	flag.StringVar(&config.Current.FileStoragePath, "r", "", "Base for short URL")
 	flag.Parse()
 
-	err := env.Parse(&config.Current)
-	if err != nil {
+	if err := env.Parse(&config.Current); err != nil {
 		panic(err)
 	}
 
@@ -41,8 +41,11 @@ func Run() {
 	if err := logger.Initialize(); err != nil {
 		panic(err)
 	}
+	if err := storage.Initialize(); err != nil {
+		panic(err)
+	}
 
-	err = http.ListenAndServe(config.Current.ServerAddress, router())
+	err := http.ListenAndServe(config.Current.ServerAddress, router())
 	if err != nil {
 		panic(err)
 	}
