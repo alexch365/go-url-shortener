@@ -7,8 +7,8 @@ import (
 	"os"
 )
 
-type UrlStore struct {
-	Uuid        int    `json:"uuid"`
+type URLStore struct {
+	UUID        int    `json:"uuid"`
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
 }
@@ -27,7 +27,7 @@ func Initialize() error {
 
 	decoder := json.NewDecoder(file)
 	for {
-		var item UrlStore
+		var item URLStore
 		if err := decoder.Decode(&item); err == io.EOF {
 			break
 		} else if err != nil {
@@ -47,7 +47,7 @@ func Save(key string, value string) error {
 
 	Set(key, value)
 	encoder := json.NewEncoder(file)
-	item := &UrlStore{len(urlStore), key, value}
+	item := &URLStore{len(urlStore), key, value}
 	err = encoder.Encode(item)
 	if err != nil {
 		return err
