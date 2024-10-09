@@ -4,21 +4,21 @@ import (
 	"flag"
 	"github.com/alexch365/go-url-shortener/internal/config"
 	"github.com/alexch365/go-url-shortener/internal/handlers"
+	"github.com/alexch365/go-url-shortener/internal/logger"
+	"github.com/alexch365/go-url-shortener/internal/storage"
 	"github.com/caarlos0/env"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"net/http"
 )
 
 func router() chi.Router {
 	r := chi.NewRouter()
-	r.Use(
-		middleware.Logger,
-		middleware.Recoverer,
-	)
+	r.Use(logger.Middleware)
+	r.Use(gzipMiddleware)
 
 	r.Route("/", func(r chi.Router) {
 		r.Post("/", handlers.Shorten)
+		r.Post("/api/shorten", handlers.ShortenAPI)
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", handlers.Expand)
 		})
@@ -27,19 +27,25 @@ func router() chi.Router {
 }
 
 func Run() {
-	// flag.Var(&params.ServerAddress, "a", "Server address host:port")
 	flag.StringVar(&config.Current.ServerAddress, "a", "", "Server address host:port")
 	flag.StringVar(&config.Current.BaseURL, "b", "", "Base for short URL")
+	flag.StringVar(&config.Current.FileStoragePath, "r", "", "Base for short URL")
 	flag.Parse()
 
-	err := env.Parse(&config.Current)
-	if err != nil {
+	if err := env.Parse(&config.Current); err != nil {
 		panic(err)
 	}
 
 	config.SetDefaults()
 
-	err = http.ListenAndServe(config.Current.ServerAddress, router())
+	if err := logger.Initialize(); err != nil {
+		panic(err)
+	}
+	if err := storage.Initialize(); err != nil {
+		panic(err)
+	}
+
+	err := http.ListenAndServe(config.Current.ServerAddress, router())
 	if err != nil {
 		panic(err)
 	}

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"github.com/alexch365/go-url-shortener/internal/config"
 	"github.com/alexch365/go-url-shortener/internal/storage"
 	"github.com/alexch365/go-url-shortener/internal/util"
@@ -39,6 +40,60 @@ func TestShorten(t *testing.T) {
 
 			assert.Equal(t, tt.status, resp.StatusCode)
 			assert.Regexp(t, tt.want, string(resBody))
+		})
+	}
+}
+
+func TestShortenAPI(t *testing.T) {
+	config.SetDefaults()
+	type want struct {
+		Result string `json:"result"`
+	}
+	tests := []struct {
+		name   string
+		body   string
+		want   want
+		status int
+	}{
+		{
+			"with valid URL",
+			`{"url": "https://practicum.yandex.ru"}`,
+			want{"http://localhost:8080/.{8}$"},
+			http.StatusCreated,
+		},
+		{
+			"with invalid URL",
+			`{"url": "https//practicum.yandex.ru"}`,
+			want{"parse .*: invalid URI for request"},
+			http.StatusBadRequest,
+		},
+		{
+			"with incorrect JSON key",
+			`{"uri": "https//practicum.yandex.ru"}`,
+			want{"parse .*: empty url"},
+			http.StatusBadRequest,
+		},
+		{
+			"with string request",
+			"https://practicum.yandex.ru",
+			want{"invalid character.*"},
+			http.StatusBadRequest,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
+			rec := httptest.NewRecorder()
+			ShortenAPI(rec, request)
+			resp := rec.Result()
+			defer resp.Body.Close()
+
+			var resBody want
+			err := json.NewDecoder(resp.Body).Decode(&resBody)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.status, resp.StatusCode)
+			assert.Regexp(t, tt.want.Result, resBody.Result)
 		})
 	}
 }
