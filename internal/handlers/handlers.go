@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/alexch365/go-url-shortener/internal/config"
@@ -11,6 +12,20 @@ import (
 	"net/url"
 	"strings"
 )
+
+func PingDatabase(w http.ResponseWriter, _ *http.Request) {
+	if storage.DbConn == nil {
+		http.Error(w, "Database connection failed.", http.StatusInternalServerError)
+		return
+	}
+
+	err := storage.DbConn.Ping(context.Background())
+	if err != nil {
+		http.Error(w, "Database connection failed.", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
 
 func Shorten(w http.ResponseWriter, req *http.Request) {
 	body, err := io.ReadAll(req.Body)

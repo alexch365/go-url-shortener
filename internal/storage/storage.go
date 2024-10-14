@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/json"
 	"github.com/alexch365/go-url-shortener/internal/config"
+	"github.com/jackc/pgx/v5"
 	"io"
 	"os"
 )
@@ -14,6 +15,7 @@ type URLStore struct {
 }
 
 var urlStore = map[string]string{}
+var DbConn *pgx.Conn
 
 func Initialize() error {
 	file, err := os.OpenFile(config.Current.FileStoragePath, os.O_RDONLY, 0666)
