@@ -15,7 +15,7 @@ type URLStore struct {
 }
 
 var urlStore = map[string]string{}
-var DbConn *pgx.Conn
+var DBConn *pgx.Conn
 
 func Initialize() error {
 	file, err := os.OpenFile(config.Current.FileStoragePath, os.O_RDONLY, 0666)

@@ -14,12 +14,12 @@ import (
 )
 
 func PingDatabase(w http.ResponseWriter, _ *http.Request) {
-	if storage.DbConn == nil {
+	if storage.DBConn == nil {
 		http.Error(w, "Database connection failed.", http.StatusInternalServerError)
 		return
 	}
 
-	err := storage.DbConn.Ping(context.Background())
+	err := storage.DBConn.Ping(context.Background())
 	if err != nil {
 		http.Error(w, "Database connection failed.", http.StatusInternalServerError)
 		return

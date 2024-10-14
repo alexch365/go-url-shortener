@@ -49,8 +49,8 @@ func Run() {
 		panic(err)
 	}
 
-	storage.DbConn, _ = pgx.Connect(context.Background(), config.Current.DatabaseDSN)
-	defer storage.DbConn.Close(context.Background())
+	storage.DBConn, _ = pgx.Connect(context.Background(), config.Current.DatabaseDSN)
+	defer storage.DBConn.Close(context.Background())
 
 	err := http.ListenAndServe(config.Current.ServerAddress, router())
 	if err != nil {
