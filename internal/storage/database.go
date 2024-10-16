@@ -34,7 +34,7 @@ func (store *DatabaseStore) Initialize() error {
 }
 
 func (store *DatabaseStore) Save(ctx context.Context, key string, value string) error {
-	item := &URLStore{0, key, value}
+	item := &URLStore{ShortURL: key, OriginalURL: value}
 	query := `INSERT INTO urls (short_url, original_url) VALUES (@short, @original)`
 	args := pgx.NamedArgs{
 		"short":    item.ShortURL,
@@ -49,7 +49,7 @@ func (store *DatabaseStore) Save(ctx context.Context, key string, value string) 
 }
 
 func (store *DatabaseStore) Get(ctx context.Context, key string) (string, error) {
-	item := &URLStore{0, key, ""}
+	item := &URLStore{ShortURL: key, OriginalURL: ""}
 	query := `
         SELECT original_url FROM urls WHERE short_url = @short
     `
