@@ -9,7 +9,6 @@ import (
 	"github.com/alexch365/go-url-shortener/internal/storage"
 	"github.com/caarlos0/env"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
 	"net/http"
 )
 
@@ -45,12 +44,17 @@ func Run() {
 	if err := logger.Initialize(); err != nil {
 		panic(err)
 	}
-	if err := storage.Initialize(); err != nil {
-		panic(err)
+
+	if config.Current.DatabaseDSN != "" {
+		handlers.StoreHandler = &storage.DatabaseStore{}
+	} else {
+		handlers.StoreHandler = &storage.MemoryStore{}
 	}
 
-	storage.DBConn, _ = pgx.Connect(context.Background(), config.Current.DatabaseDSN)
-	defer storage.DBConn.Close(context.Background())
+	if err := handlers.StoreHandler.Initialize(); err != nil {
+		panic(err)
+	}
+	defer handlers.StoreHandler.Close(context.Background())
 
 	err := http.ListenAndServe(config.Current.ServerAddress, router())
 	if err != nil {
