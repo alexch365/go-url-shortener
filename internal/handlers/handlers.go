@@ -12,6 +12,22 @@ import (
 	"strings"
 )
 
+var StoreHandler storage.StoreHandler
+
+func PingDatabase(w http.ResponseWriter, r *http.Request) {
+	handler, ok := StoreHandler.(*storage.DatabaseStore)
+	if !ok {
+		http.Error(w, "Database connection failed.", http.StatusInternalServerError)
+		return
+	}
+
+	if err := handler.DBConn.Ping(r.Context()); err != nil {
+		http.Error(w, "Database connection failed.", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func Shorten(w http.ResponseWriter, req *http.Request) {
 	body, err := io.ReadAll(req.Body)
 	if err != nil || len(body) == 0 {
@@ -26,7 +42,7 @@ func Shorten(w http.ResponseWriter, req *http.Request) {
 	}
 
 	urlID := util.RandomString(8)
-	storage.Save(urlID, urlStr)
+	_ = StoreHandler.Save(req.Context(), urlID, urlStr)
 	w.WriteHeader(http.StatusCreated)
 
 	if _, err = w.Write([]byte(config.Current.BaseURL + "/" + urlID)); err != nil {
@@ -53,7 +69,7 @@ func ShortenAPI(w http.ResponseWriter, req *http.Request) {
 	}
 
 	urlID := util.RandomString(8)
-	storage.Save(urlID, urls.URL)
+	_ = StoreHandler.Save(req.Context(), urlID, urls.URL)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	err := json.NewEncoder(w).Encode(response{config.Current.BaseURL + "/" + urlID})
@@ -65,8 +81,8 @@ func ShortenAPI(w http.ResponseWriter, req *http.Request) {
 
 func Expand(w http.ResponseWriter, req *http.Request) {
 	urlID := strings.TrimPrefix(req.URL.Path, "/")
-	storedURL := storage.Get(urlID)
-	if storedURL == "" {
+	storedURL, err := StoreHandler.Get(req.Context(), urlID)
+	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid ID: %s", urlID), http.StatusNotFound)
 		return
 	}

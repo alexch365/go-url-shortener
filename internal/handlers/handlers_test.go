@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/alexch365/go-url-shortener/internal/config"
 	"github.com/alexch365/go-url-shortener/internal/storage"
@@ -17,6 +18,7 @@ import (
 
 func TestShorten(t *testing.T) {
 	config.SetDefaults()
+	StoreHandler = &storage.MemoryStore{}
 	tests := []struct {
 		name   string
 		body   string
@@ -46,6 +48,7 @@ func TestShorten(t *testing.T) {
 
 func TestShortenAPI(t *testing.T) {
 	config.SetDefaults()
+	StoreHandler = &storage.MemoryStore{}
 	type want struct {
 		Result string `json:"result"`
 	}
@@ -100,7 +103,8 @@ func TestShortenAPI(t *testing.T) {
 
 func TestExpand(t *testing.T) {
 	urlID := util.RandomString(8)
-	storage.Save(urlID, "https://practicum.yandex.ru")
+	StoreHandler = &storage.MemoryStore{}
+	_ = StoreHandler.Save(context.TODO(), urlID, "https://practicum.yandex.ru")
 
 	tests := []struct {
 		name   string
