@@ -12,6 +12,20 @@ import (
 	"strings"
 )
 
+type (
+	apiRequest struct {
+		URL string `json:"url"`
+	}
+	apiResponse struct {
+		Result string `json:"result,omitempty"`
+		Error  string `json:"error,omitempty"`
+	}
+	batchAPIResponse struct {
+		CorrelationID string `json:"correlation_id"`
+		ShortURL      string `json:"short_url"`
+	}
+)
+
 var StoreHandler storage.StoreHandler
 
 func PingDatabase(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +35,7 @@ func PingDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := handler.DBConn.Ping(r.Context()); err != nil {
+	if err := handler.DB.PingContext(r.Context()); err != nil {
 		http.Error(w, "Database connection failed.", http.StatusInternalServerError)
 		return
 	}
@@ -35,47 +49,85 @@ func Shorten(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	urlStr := string(body)
-	if _, err = url.ParseRequestURI(urlStr); err != nil {
-		http.Error(w, fmt.Sprintf("Invalid URL: %s", urlStr), http.StatusBadRequest)
+	store := storage.URLStore{ShortURL: util.RandomString(8), OriginalURL: string(body)}
+	if _, err = url.ParseRequestURI(store.OriginalURL); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid URL: %s", store.OriginalURL), http.StatusBadRequest)
 		return
 	}
 
-	urlID := util.RandomString(8)
-	_ = StoreHandler.Save(req.Context(), urlID, urlStr)
+	if err = StoreHandler.Save(req.Context(), &store); err != nil {
+		util.JSONError(w, apiResponse{Error: err.Error()}, http.StatusBadRequest)
+		return
+	}
 	w.WriteHeader(http.StatusCreated)
 
-	if _, err = w.Write([]byte(config.Current.BaseURL + "/" + urlID)); err != nil {
+	if _, err = w.Write([]byte(config.Current.BaseURL + "/" + store.ShortURL)); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
 	}
 }
 
 func ShortenAPI(w http.ResponseWriter, req *http.Request) {
-	var urls struct {
-		URL string `json:"url"`
-	}
-	type response struct {
-		Result string `json:"result"`
-	}
-	if err := json.NewDecoder(req.Body).Decode(&urls); err != nil {
-		util.JSONError(w, response{err.Error()}, http.StatusBadRequest)
+	var requestJSON apiRequest
+	if err := json.NewDecoder(req.Body).Decode(&requestJSON); err != nil {
+		util.JSONError(w, apiResponse{Error: "Invalid request format."}, http.StatusBadRequest)
 		return
 	}
 
-	if _, err := url.ParseRequestURI(urls.URL); err != nil {
-		util.JSONError(w, response{err.Error()}, http.StatusBadRequest)
+	if _, err := url.ParseRequestURI(requestJSON.URL); err != nil {
+		response := apiResponse{Error: fmt.Sprintf("Invalid URL: %s", requestJSON.URL)}
+		util.JSONError(w, response, http.StatusBadRequest)
 		return
 	}
 
-	urlID := util.RandomString(8)
-	_ = StoreHandler.Save(req.Context(), urlID, urls.URL)
+	store := storage.URLStore{ShortURL: util.RandomString(8), OriginalURL: requestJSON.URL}
+	if err := StoreHandler.Save(req.Context(), &store); err != nil {
+		util.JSONError(w, apiResponse{Error: err.Error()}, http.StatusBadRequest)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	err := json.NewEncoder(w).Encode(response{config.Current.BaseURL + "/" + urlID})
+
+	err := json.NewEncoder(w).Encode(apiResponse{Result: config.Current.BaseURL + "/" + store.ShortURL})
 	if err != nil {
-		util.JSONError(w, response{err.Error()}, http.StatusBadRequest)
+		util.JSONError(w, apiResponse{Error: err.Error()}, http.StatusBadRequest)
+	}
+}
+
+func ShortenAPIBatch(w http.ResponseWriter, req *http.Request) {
+	var store []storage.URLStore
+	if err := json.NewDecoder(req.Body).Decode(&store); err != nil {
+		util.JSONError(w, apiResponse{Error: "Invalid request format."}, http.StatusBadRequest)
 		return
+	}
+
+	var responseStore []batchAPIResponse
+	for i, item := range store {
+		if _, err := url.ParseRequestURI(item.OriginalURL); err != nil {
+			response := apiResponse{Error: fmt.Sprintf("Invalid URL: %s", item.OriginalURL)}
+			util.JSONError(w, response, http.StatusBadRequest)
+			return
+		}
+
+		store[i].ShortURL = util.RandomString(8)
+		responseItem := batchAPIResponse{
+			item.CorrelationID,
+			config.Current.BaseURL + "/" + store[i].ShortURL,
+		}
+		responseStore = append(responseStore, responseItem)
+	}
+
+	if err := StoreHandler.SaveBatch(req.Context(), &store); err != nil {
+		util.JSONError(w, apiResponse{Error: err.Error()}, http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
+	err := json.NewEncoder(w).Encode(responseStore)
+	if err != nil {
+		util.JSONError(w, apiResponse{Error: err.Error()}, http.StatusBadRequest)
 	}
 }
 

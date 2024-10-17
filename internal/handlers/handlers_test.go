@@ -49,37 +49,35 @@ func TestShorten(t *testing.T) {
 func TestShortenAPI(t *testing.T) {
 	config.SetDefaults()
 	StoreHandler = &storage.MemoryStore{}
-	type want struct {
-		Result string `json:"result"`
-	}
+
 	tests := []struct {
 		name   string
 		body   string
-		want   want
+		want   apiResponse
 		status int
 	}{
 		{
 			"with valid URL",
 			`{"url": "https://practicum.yandex.ru"}`,
-			want{"http://localhost:8080/.{8}$"},
+			apiResponse{Result: "http://localhost:8080/.{8}$"},
 			http.StatusCreated,
 		},
 		{
 			"with invalid URL",
 			`{"url": "https//practicum.yandex.ru"}`,
-			want{"parse .*: invalid URI for request"},
+			apiResponse{Error: "Invalid URL: .*"},
 			http.StatusBadRequest,
 		},
 		{
 			"with incorrect JSON key",
-			`{"uri": "https//practicum.yandex.ru"}`,
-			want{"parse .*: empty url"},
+			`{"uri": "https://practicum.yandex.ru"}`,
+			apiResponse{Error: "Invalid URL: .*"},
 			http.StatusBadRequest,
 		},
 		{
 			"with string request",
 			"https://practicum.yandex.ru",
-			want{"invalid character.*"},
+			apiResponse{Error: "Invalid request format."},
 			http.StatusBadRequest,
 		},
 	}
@@ -91,12 +89,102 @@ func TestShortenAPI(t *testing.T) {
 			resp := rec.Result()
 			defer resp.Body.Close()
 
-			var resBody want
+			var resBody apiResponse
 			err := json.NewDecoder(resp.Body).Decode(&resBody)
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.status, resp.StatusCode)
-			assert.Regexp(t, tt.want.Result, resBody.Result)
+			if tt.want.Error != "" {
+				assert.Regexp(t, tt.want.Error, resBody.Error)
+			}
+			if tt.want.Result != "" {
+				assert.Regexp(t, tt.want.Result, resBody.Result)
+			}
+		})
+	}
+}
+
+func TestShortenAPIBatch(t *testing.T) {
+	config.SetDefaults()
+	StoreHandler = &storage.MemoryStore{}
+
+	tests := []struct {
+		name     string
+		body     string
+		response []batchAPIResponse
+		error    apiResponse
+		status   int
+	}{
+		{
+			"with valid URL",
+			`[
+					{
+					  "correlation_id": "30d53d47-6d08-41ce-992f-097b0f01479b",
+					  "original_url": "https://practicum.yandex.ru"
+					},
+					{
+					  "correlation_id": "c65f7a7b-770d-4a59-97d2-946bcdfa2589",
+					  "original_url": "https://ya.ru"
+					}
+				]`,
+			[]batchAPIResponse{
+				batchAPIResponse{"30d53d47-6d08-41ce-992f-097b0f01479b", "http://localhost:8080/.{8}$"},
+				batchAPIResponse{"c65f7a7b-770d-4a59-97d2-946bcdfa2589", "http://localhost:8080/.{8}$"},
+			},
+			apiResponse{},
+			http.StatusCreated,
+		},
+		{
+			"with invalid URL",
+			`[
+					{
+					  "correlation_id": "30d53d47-6d08-41ce-992f-097b0f01479b",
+					  "original_url": "https//practicum.yandex.ru"
+					}
+				]`,
+			[]batchAPIResponse{},
+			apiResponse{Error: "Invalid URL: .*"},
+			http.StatusBadRequest,
+		},
+		{
+			"with incorrect JSON key",
+			`[{"uri": "https://practicum.yandex.ru"}]`,
+			[]batchAPIResponse{},
+			apiResponse{Error: "Invalid URL: .*"},
+			http.StatusBadRequest,
+		},
+		{
+			"with string request",
+			"https://practicum.yandex.ru",
+			[]batchAPIResponse{},
+			apiResponse{Error: "Invalid request format."},
+			http.StatusBadRequest,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
+			rec := httptest.NewRecorder()
+			ShortenAPIBatch(rec, request)
+			resp := rec.Result()
+			defer resp.Body.Close()
+
+			assert.Equal(t, tt.status, resp.StatusCode)
+			switch resp.StatusCode {
+			case http.StatusCreated:
+				var resBody []batchAPIResponse
+				err := json.NewDecoder(resp.Body).Decode(&resBody)
+				require.NoError(t, err)
+				for i, res := range tt.response {
+					assert.Equal(t, res.CorrelationID, resBody[i].CorrelationID)
+					assert.Regexp(t, res.ShortURL, resBody[i].ShortURL)
+				}
+			case http.StatusBadRequest:
+				var resBody apiResponse
+				err := json.NewDecoder(resp.Body).Decode(&resBody)
+				require.NoError(t, err)
+				assert.Regexp(t, tt.error.Error, resBody.Error)
+			}
 		})
 	}
 }
@@ -104,7 +192,7 @@ func TestShortenAPI(t *testing.T) {
 func TestExpand(t *testing.T) {
 	urlID := util.RandomString(8)
 	StoreHandler = &storage.MemoryStore{}
-	_ = StoreHandler.Save(context.TODO(), urlID, "https://practicum.yandex.ru")
+	_ = StoreHandler.Save(context.TODO(), &storage.URLStore{ShortURL: urlID, OriginalURL: "https://practicum.yandex.ru"})
 
 	tests := []struct {
 		name   string

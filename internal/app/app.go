@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"flag"
 	"github.com/alexch365/go-url-shortener/internal/config"
 	"github.com/alexch365/go-url-shortener/internal/handlers"
@@ -21,6 +20,7 @@ func router() chi.Router {
 		r.Get("/ping", handlers.PingDatabase)
 		r.Post("/", handlers.Shorten)
 		r.Post("/api/shorten", handlers.ShortenAPI)
+		r.Post("/api/shorten/batch", handlers.ShortenAPIBatch)
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", handlers.Expand)
 		})
@@ -54,7 +54,6 @@ func Run() {
 	if err := handlers.StoreHandler.Initialize(); err != nil {
 		panic(err)
 	}
-	defer handlers.StoreHandler.Close(context.Background())
 
 	err := http.ListenAndServe(config.Current.ServerAddress, router())
 	if err != nil {

@@ -9,22 +9,23 @@ import (
 	"os"
 )
 
-type StoreHandler interface {
-	Initialize() error
-	Get(ctx context.Context, key string) (string, error)
-	Save(ctx context.Context, key string, value string) error
-	Close(ctx context.Context) error
-}
-
-type URLStore struct {
-	UUID        int    `json:"uuid"`
-	ShortURL    string `json:"short_url"`
-	OriginalURL string `json:"original_url"`
-}
-
-type MemoryStore struct {
-	urls []URLStore
-}
+type (
+	StoreHandler interface {
+		Initialize() error
+		Get(ctx context.Context, key string) (string, error)
+		Save(ctx context.Context, store *URLStore) error
+		SaveBatch(ctx context.Context, store *[]URLStore) error
+	}
+	URLStore struct {
+		UUID          int    `json:"uuid,omitempty" db:"-"`
+		CorrelationID string `json:"correlation_id,omitempty" db:"-"`
+		ShortURL      string `json:"short_url" db:"short_url"`
+		OriginalURL   string `json:"original_url" db:"original_url"`
+	}
+	MemoryStore struct {
+		urls []URLStore
+	}
+)
 
 func (store *MemoryStore) Initialize() error {
 	file, err := os.OpenFile(config.Current.FileStoragePath, os.O_RDONLY, 0666)
@@ -49,20 +50,37 @@ func (store *MemoryStore) Initialize() error {
 	return nil
 }
 
-func (store *MemoryStore) Save(_ context.Context, key string, value string) error {
+func (store *MemoryStore) Save(_ context.Context, urlStore *URLStore) error {
 	file, err := os.OpenFile(config.Current.FileStoragePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
+	urlStore.UUID = len(store.urls)
+	store.urls = append(store.urls, *urlStore)
 
-	item := &URLStore{len(store.urls), key, value}
-	store.urls = append(store.urls, *item)
-	encoder := json.NewEncoder(file)
-	err = encoder.Encode(item)
+	err = json.NewEncoder(file).Encode(urlStore)
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func (store *MemoryStore) SaveBatch(_ context.Context, urlStore *[]URLStore) error {
+	file, err := os.OpenFile(config.Current.FileStoragePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	store.urls = append(store.urls, *urlStore...)
+	encoder := json.NewEncoder(file)
+	for _, item := range *urlStore {
+		err = encoder.Encode(item)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -73,8 +91,4 @@ func (store *MemoryStore) Get(_ context.Context, key string) (string, error) {
 		}
 	}
 	return "", errors.New("key not found")
-}
-
-func (store *MemoryStore) Close(_ context.Context) error {
-	return nil
 }
