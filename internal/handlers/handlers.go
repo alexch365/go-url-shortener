@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/alexch365/go-url-shortener/internal/config"
 	"github.com/alexch365/go-url-shortener/internal/storage"
@@ -55,12 +56,18 @@ func Shorten(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if err = StoreHandler.Save(req.Context(), &store); err != nil {
-		util.JSONError(w, apiResponse{Error: err.Error()}, http.StatusBadRequest)
+	err = StoreHandler.Save(req.Context(), &store)
+	if errors.As(err, &storage.ConflictError{}) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(config.Current.BaseURL + "/" + err.(storage.ConflictError).ShortURL))
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
+	w.WriteHeader(http.StatusCreated)
 	if _, err = w.Write([]byte(config.Current.BaseURL + "/" + store.ShortURL)); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
@@ -68,6 +75,9 @@ func Shorten(w http.ResponseWriter, req *http.Request) {
 
 func ShortenAPI(w http.ResponseWriter, req *http.Request) {
 	var requestJSON apiRequest
+
+	w.Header().Set("Content-Type", "application/json")
+
 	if err := json.NewDecoder(req.Body).Decode(&requestJSON); err != nil {
 		util.JSONError(w, apiResponse{Error: "Invalid request format."}, http.StatusBadRequest)
 		return
@@ -80,15 +90,21 @@ func ShortenAPI(w http.ResponseWriter, req *http.Request) {
 	}
 
 	store := storage.URLStore{ShortURL: util.RandomString(8), OriginalURL: requestJSON.URL}
-	if err := StoreHandler.Save(req.Context(), &store); err != nil {
+	err := StoreHandler.Save(req.Context(), &store)
+	if errors.As(err, &storage.ConflictError{}) {
+		w.WriteHeader(http.StatusConflict)
+		response := apiResponse{Result: config.Current.BaseURL + "/" + err.(storage.ConflictError).ShortURL}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if err != nil {
 		util.JSONError(w, apiResponse{Error: err.Error()}, http.StatusBadRequest)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-
-	err := json.NewEncoder(w).Encode(apiResponse{Result: config.Current.BaseURL + "/" + store.ShortURL})
+	err = json.NewEncoder(w).Encode(apiResponse{Result: config.Current.BaseURL + "/" + store.ShortURL})
 	if err != nil {
 		util.JSONError(w, apiResponse{Error: err.Error()}, http.StatusBadRequest)
 	}

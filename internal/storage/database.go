@@ -13,11 +13,16 @@ var schema = `
 		id serial PRIMARY KEY,
 		short_url TEXT NOT NULL,
 		original_url TEXT NOT NULL
-	)
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS urls_original_url ON urls(original_url);
 `
 
 type DatabaseStore struct {
 	DB *sqlx.DB
+}
+
+type ConflictError struct {
+	ShortURL string `db:"short_url"`
 }
 
 func (store *DatabaseStore) Initialize() error {
@@ -42,13 +47,24 @@ func (store *DatabaseStore) Save(ctx context.Context, urlStore *URLStore) error 
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.PrepareNamed(`INSERT INTO urls (short_url, original_url) VALUES (:short_url, :original_url)`)
+	stmt, err := tx.PrepareNamed(`
+		INSERT INTO urls (short_url, original_url) VALUES (:short_url, :original_url)
+		ON CONFLICT (original_url) DO UPDATE
+		SET original_url = EXCLUDED.original_url
+		RETURNING short_url;
+	`)
 	if err != nil {
 		return err
 	}
 
-	if _, err = stmt.Exec(urlStore); err != nil {
+	var conflictErr ConflictError
+	err = stmt.QueryRowx(&urlStore).Scan(&conflictErr.ShortURL)
+	if err != nil {
 		return err
+	}
+
+	if conflictErr.ShortURL != urlStore.ShortURL {
+		return conflictErr
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -88,4 +104,8 @@ func (store *DatabaseStore) Get(ctx context.Context, key string) (string, error)
 		return "", err
 	}
 	return item.OriginalURL, nil
+}
+
+func (err ConflictError) Error() string {
+	return "Original URL already exists"
 }
