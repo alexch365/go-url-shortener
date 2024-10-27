@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/alexch365/go-url-shortener/internal/config"
 	"github.com/alexch365/go-url-shortener/internal/storage"
 	"github.com/alexch365/go-url-shortener/internal/util"
 	"io"
@@ -12,65 +12,128 @@ import (
 	"strings"
 )
 
+type (
+	apiRequest struct {
+		URL string `json:"url"`
+	}
+	apiResponse struct {
+		Result string `json:"result,omitempty"`
+		Error  string `json:"error,omitempty"`
+	}
+)
+
+var StoreHandler storage.StoreHandler
+
+func PingDatabase(w http.ResponseWriter, r *http.Request) {
+	handler, ok := StoreHandler.(*storage.DatabaseStore)
+	if !ok {
+		http.Error(w, "Database connection failed.", http.StatusInternalServerError)
+		return
+	}
+
+	if err := handler.DB.PingContext(r.Context()); err != nil {
+		http.Error(w, "Database connection failed.", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func Shorten(w http.ResponseWriter, req *http.Request) {
-	body, err := io.ReadAll(req.Body)
-	if err != nil || len(body) == 0 {
+	bodyURL, err := parseURLFromBody(req.Body)
+	if err != nil {
 		http.Error(w, "You must provide a valid URL.", http.StatusBadRequest)
 		return
 	}
 
-	urlStr := string(body)
-	if _, err = url.ParseRequestURI(urlStr); err != nil {
-		http.Error(w, fmt.Sprintf("Invalid URL: %s", urlStr), http.StatusBadRequest)
+	result, err := StoreHandler.Save(req.Context(), bodyURL)
+	if err != nil {
+		if errors.As(err, &storage.ConflictError{}) {
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(err.(storage.ConflictError).ShortURL))
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 
-	urlID := util.RandomString(8)
-	storage.Save(urlID, urlStr)
 	w.WriteHeader(http.StatusCreated)
-
-	if _, err = w.Write([]byte(config.Current.BaseURL + "/" + urlID)); err != nil {
+	_, err = w.Write([]byte(result))
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
 	}
 }
 
 func ShortenAPI(w http.ResponseWriter, req *http.Request) {
-	var urls struct {
-		URL string `json:"url"`
-	}
-	type response struct {
-		Result string `json:"result"`
-	}
-	if err := json.NewDecoder(req.Body).Decode(&urls); err != nil {
-		util.JSONError(w, response{err.Error()}, http.StatusBadRequest)
+	var requestJSON apiRequest
+	if err := json.NewDecoder(req.Body).Decode(&requestJSON); err != nil {
+		util.JSONResponse(w, apiResponse{Error: "Invalid request format."}, http.StatusBadRequest)
 		return
 	}
 
-	if _, err := url.ParseRequestURI(urls.URL); err != nil {
-		util.JSONError(w, response{err.Error()}, http.StatusBadRequest)
+	if _, err := url.ParseRequestURI(requestJSON.URL); err != nil {
+		response := apiResponse{Error: fmt.Sprintf("Invalid URL: %s", requestJSON.URL)}
+		util.JSONResponse(w, response, http.StatusBadRequest)
 		return
 	}
 
-	urlID := util.RandomString(8)
-	storage.Save(urlID, urls.URL)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	err := json.NewEncoder(w).Encode(response{config.Current.BaseURL + "/" + urlID})
+	shortURL, err := StoreHandler.Save(req.Context(), requestJSON.URL)
 	if err != nil {
-		util.JSONError(w, response{err.Error()}, http.StatusBadRequest)
+		if errors.As(err, &storage.ConflictError{}) {
+			util.JSONResponse(w, apiResponse{Result: err.(storage.ConflictError).ShortURL}, http.StatusConflict)
+		} else {
+			util.JSONResponse(w, apiResponse{Error: err.Error()}, http.StatusInternalServerError)
+		}
 		return
 	}
+
+	util.JSONResponse(w, apiResponse{Result: shortURL}, http.StatusCreated)
+}
+
+func ShortenAPIBatch(w http.ResponseWriter, req *http.Request) {
+	var store []storage.URLStore
+	if err := json.NewDecoder(req.Body).Decode(&store); err != nil {
+		util.JSONResponse(w, apiResponse{Error: "Invalid request format."}, http.StatusBadRequest)
+		return
+	}
+
+	for _, item := range store {
+		if _, err := url.ParseRequestURI(item.OriginalURL); err != nil {
+			response := apiResponse{Error: fmt.Sprintf("Invalid URL: %s", item.OriginalURL)}
+			util.JSONResponse(w, response, http.StatusBadRequest)
+			return
+		}
+	}
+
+	responseStore, err := StoreHandler.SaveBatch(req.Context(), &store)
+	if err != nil {
+		util.JSONResponse(w, apiResponse{Error: err.Error()}, http.StatusBadRequest)
+		return
+	}
+
+	util.JSONResponse(w, responseStore, http.StatusCreated)
 }
 
 func Expand(w http.ResponseWriter, req *http.Request) {
 	urlID := strings.TrimPrefix(req.URL.Path, "/")
-	storedURL := storage.Get(urlID)
-	if storedURL == "" {
+	storedURL, err := StoreHandler.Get(req.Context(), urlID)
+	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid ID: %s", urlID), http.StatusNotFound)
 		return
 	}
 
 	w.Header().Set("Location", storedURL)
 	w.WriteHeader(http.StatusTemporaryRedirect)
+}
+
+func parseURLFromBody(body io.ReadCloser) (string, error) {
+	defer body.Close()
+	bodyData, err := io.ReadAll(body)
+	if err != nil || len(bodyData) == 0 {
+		return "", errors.New("empty or invalid body")
+	}
+	urlStr := string(bodyData)
+	if _, err := url.ParseRequestURI(urlStr); err != nil {
+		return "", fmt.Errorf("invalid URL: %s", urlStr)
+	}
+	return urlStr, nil
 }

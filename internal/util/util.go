@@ -18,9 +18,10 @@ func RandomString(n int) string {
 	return sb.String()
 }
 
-func JSONError(w http.ResponseWriter, err interface{}, code int) {
+func JSONResponse(w http.ResponseWriter, response interface{}, status int) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(err)
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

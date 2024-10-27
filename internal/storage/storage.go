@@ -1,21 +1,34 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"github.com/alexch365/go-url-shortener/internal/config"
+	"github.com/alexch365/go-url-shortener/internal/util"
 	"io"
 	"os"
 )
 
-type URLStore struct {
-	UUID        int    `json:"uuid"`
-	ShortURL    string `json:"short_url"`
-	OriginalURL string `json:"original_url"`
-}
+type (
+	StoreHandler interface {
+		Initialize() error
+		Get(ctx context.Context, key string) (string, error)
+		Save(ctx context.Context, originalURL string) (string, error)
+		SaveBatch(ctx context.Context, store *[]URLStore) ([]URLStore, error)
+	}
+	URLStore struct {
+		UUID          int    `json:"uuid,omitempty" db:"-"`
+		CorrelationID string `json:"correlation_id,omitempty" db:"-"`
+		ShortURL      string `json:"short_url" db:"short_url"`
+		OriginalURL   string `json:"original_url" db:"original_url"`
+	}
+	MemoryStore struct {
+		urls []URLStore
+	}
+)
 
-var urlStore = map[string]string{}
-
-func Initialize() error {
+func (store *MemoryStore) Initialize() error {
 	file, err := os.OpenFile(config.Current.FileStoragePath, os.O_RDONLY, 0666)
 	if os.IsNotExist(err) {
 		return nil
@@ -33,32 +46,57 @@ func Initialize() error {
 		} else if err != nil {
 			return err
 		}
-		Set(item.ShortURL, item.OriginalURL)
+		store.urls = append(store.urls, item)
 	}
 	return nil
 }
 
-func Save(key string, value string) error {
+func (store *MemoryStore) Save(_ context.Context, originalURL string) (string, error) {
 	file, err := os.OpenFile(config.Current.FileStoragePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer file.Close()
 
-	Set(key, value)
-	encoder := json.NewEncoder(file)
-	item := &URLStore{len(urlStore), key, value}
-	err = encoder.Encode(item)
+	urlStore := URLStore{UUID: len(store.urls), ShortURL: util.RandomString(8), OriginalURL: originalURL}
+	store.urls = append(store.urls, urlStore)
+
+	err = json.NewEncoder(file).Encode(urlStore)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return nil
+	return config.Current.BaseURL + "/" + urlStore.ShortURL, nil
 }
 
-func Get(key string) string {
-	return urlStore[key]
+func (store *MemoryStore) SaveBatch(_ context.Context, urlStore *[]URLStore) ([]URLStore, error) {
+	file, err := os.OpenFile(config.Current.FileStoragePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	var resultURLs []URLStore
+	for _, item := range *urlStore {
+		item.ShortURL = util.RandomString(8)
+		store.urls = append(store.urls, item)
+		resultItem := item
+		resultItem.ShortURL = config.Current.BaseURL + "/" + item.ShortURL
+		resultURLs = append(resultURLs, resultItem)
+
+		if err = encoder.Encode(item); err != nil {
+			return resultURLs, err
+		}
+	}
+
+	return resultURLs, nil
 }
 
-func Set(key string, value string) {
-	urlStore[key] = value
+func (store *MemoryStore) Get(_ context.Context, key string) (string, error) {
+	for i := range store.urls {
+		if store.urls[i].ShortURL == key {
+			return store.urls[i].OriginalURL, nil
+		}
+	}
+	return "", errors.New("key not found")
 }
