@@ -111,7 +111,7 @@ func TestShortenAPIBatch(t *testing.T) {
 	tests := []struct {
 		name     string
 		body     string
-		response []batchAPIResponse
+		response []storage.URLStore
 		error    apiResponse
 		status   int
 	}{
@@ -127,9 +127,9 @@ func TestShortenAPIBatch(t *testing.T) {
 					  "original_url": "https://ya.ru"
 					}
 				]`,
-			[]batchAPIResponse{
-				batchAPIResponse{"30d53d47-6d08-41ce-992f-097b0f01479b", "http://localhost:8080/.{8}$"},
-				batchAPIResponse{"c65f7a7b-770d-4a59-97d2-946bcdfa2589", "http://localhost:8080/.{8}$"},
+			[]storage.URLStore{
+				{CorrelationID: "30d53d47-6d08-41ce-992f-097b0f01479b", ShortURL: "http://localhost:8080/.{8}$"},
+				{CorrelationID: "c65f7a7b-770d-4a59-97d2-946bcdfa2589", ShortURL: "http://localhost:8080/.{8}$"},
 			},
 			apiResponse{},
 			http.StatusCreated,
@@ -142,21 +142,21 @@ func TestShortenAPIBatch(t *testing.T) {
 					  "original_url": "https//practicum.yandex.ru"
 					}
 				]`,
-			[]batchAPIResponse{},
+			[]storage.URLStore{},
 			apiResponse{Error: "Invalid URL: .*"},
 			http.StatusBadRequest,
 		},
 		{
 			"with incorrect JSON key",
 			`[{"uri": "https://practicum.yandex.ru"}]`,
-			[]batchAPIResponse{},
+			[]storage.URLStore{},
 			apiResponse{Error: "Invalid URL: .*"},
 			http.StatusBadRequest,
 		},
 		{
 			"with string request",
 			"https://practicum.yandex.ru",
-			[]batchAPIResponse{},
+			[]storage.URLStore{},
 			apiResponse{Error: "Invalid request format."},
 			http.StatusBadRequest,
 		},
@@ -172,7 +172,7 @@ func TestShortenAPIBatch(t *testing.T) {
 			assert.Equal(t, tt.status, resp.StatusCode)
 			switch resp.StatusCode {
 			case http.StatusCreated:
-				var resBody []batchAPIResponse
+				var resBody []storage.URLStore
 				err := json.NewDecoder(resp.Body).Decode(&resBody)
 				require.NoError(t, err)
 				for i, res := range tt.response {
@@ -190,16 +190,17 @@ func TestShortenAPIBatch(t *testing.T) {
 }
 
 func TestExpand(t *testing.T) {
-	urlID := util.RandomString(8)
+	config.SetDefaults()
 	StoreHandler = &storage.MemoryStore{}
-	_ = StoreHandler.Save(context.TODO(), &storage.URLStore{ShortURL: urlID, OriginalURL: "https://practicum.yandex.ru"})
+	result, _ := StoreHandler.Save(context.TODO(), "https://practicum.yandex.ru")
+	urlParts := strings.Split(result, "/")
 
 	tests := []struct {
 		name   string
 		id     string
 		status int
 	}{
-		{"with stored ID", urlID, http.StatusTemporaryRedirect},
+		{"with stored ID", urlParts[len(urlParts)-1], http.StatusTemporaryRedirect},
 		{"with random ID", util.RandomString(8), http.StatusNotFound},
 	}
 	for _, tt := range tests {

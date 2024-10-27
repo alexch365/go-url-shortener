@@ -3,9 +3,9 @@ package storage
 import (
 	"context"
 	"github.com/alexch365/go-url-shortener/internal/config"
-	"github.com/jmoiron/sqlx"
-
+	"github.com/alexch365/go-url-shortener/internal/util"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
 )
 
 var schema = `
@@ -40,58 +40,59 @@ func (store *DatabaseStore) Initialize() error {
 	return nil
 }
 
-func (store *DatabaseStore) Save(ctx context.Context, urlStore *URLStore) error {
-	tx, err := store.DB.BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+func (store *DatabaseStore) Save(ctx context.Context, originalURL string) (string, error) {
+	urlStore := URLStore{ShortURL: util.RandomString(8), OriginalURL: originalURL}
 
-	stmt, err := tx.PrepareNamed(`
+	stmt, err := store.DB.PrepareNamedContext(ctx, `
 		INSERT INTO urls (short_url, original_url) VALUES (:short_url, :original_url)
 		ON CONFLICT (original_url) DO UPDATE
 		SET original_url = EXCLUDED.original_url
 		RETURNING short_url;
 	`)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	var conflictErr ConflictError
 	err = stmt.QueryRowx(&urlStore).Scan(&conflictErr.ShortURL)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if conflictErr.ShortURL != urlStore.ShortURL {
-		return conflictErr
+		return config.Current.BaseURL + "/" + conflictErr.ShortURL, conflictErr
 	}
-
-	if err = tx.Commit(); err != nil {
-		return err
-	}
-	return nil
+	return config.Current.BaseURL + "/" + urlStore.ShortURL, nil
 }
 
-func (store *DatabaseStore) SaveBatch(ctx context.Context, urlStore *[]URLStore) error {
+func (store *DatabaseStore) SaveBatch(ctx context.Context, urlStore *[]URLStore) ([]URLStore, error) {
 	tx, err := store.DB.BeginTxx(ctx, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer tx.Rollback()
+
+	var resultURLs []URLStore
+	for _, item := range *urlStore {
+		item.ShortURL = util.RandomString(8)
+		resultItem := item
+		resultItem.ShortURL = config.Current.BaseURL + "/" + item.ShortURL
+		resultURLs = append(resultURLs, resultItem)
+	}
 
 	_, err = tx.NamedExec(
 		`INSERT INTO urls (short_url, original_url) VALUES (:short_url, :original_url)`,
 		*urlStore,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if err = tx.Commit(); err != nil {
-		return err
+	err = tx.Commit()
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	return resultURLs, nil
 }
 
 func (store *DatabaseStore) Get(ctx context.Context, key string) (string, error) {
