@@ -47,7 +47,12 @@ func Shorten(w http.ResponseWriter, req *http.Request) {
 
 	result, err := StoreHandler.Save(req.Context(), bodyURL)
 	if err != nil {
-		handleConflictError(w, err)
+		if errors.As(err, &storage.ConflictError{}) {
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(err.(storage.ConflictError).ShortURL))
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -73,7 +78,11 @@ func ShortenAPI(w http.ResponseWriter, req *http.Request) {
 
 	shortURL, err := StoreHandler.Save(req.Context(), requestJSON.URL)
 	if err != nil {
-		handleConflictError(w, err)
+		if errors.As(err, &storage.ConflictError{}) {
+			util.JSONResponse(w, apiResponse{Result: err.(storage.ConflictError).ShortURL}, http.StatusConflict)
+		} else {
+			util.JSONResponse(w, apiResponse{Error: err.Error()}, http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -127,13 +136,4 @@ func parseURLFromBody(body io.ReadCloser) (string, error) {
 		return "", fmt.Errorf("invalid URL: %s", urlStr)
 	}
 	return urlStr, nil
-}
-
-func handleConflictError(w http.ResponseWriter, err error) {
-	if errors.As(err, &storage.ConflictError{}) {
-		w.WriteHeader(http.StatusConflict)
-		w.Write([]byte(err.(storage.ConflictError).ShortURL))
-	} else {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
 }

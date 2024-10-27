@@ -58,7 +58,7 @@ func (store *DatabaseStore) Save(ctx context.Context, originalURL string) (strin
 	}
 
 	if existingShortURL != shortURL {
-		return config.Current.BaseURL + "/" + existingShortURL, &ConflictError{ShortURL: existingShortURL}
+		return "", ConflictError{ShortURL: config.Current.BaseURL + "/" + existingShortURL}
 	}
 	return config.Current.BaseURL + "/" + shortURL, nil
 }
