@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-
 	"github.com/alexch365/go-url-shortener/internal/config"
 	"github.com/alexch365/go-url-shortener/internal/util"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -15,9 +14,10 @@ var schema = `
 	CREATE TABLE IF NOT EXISTS urls (
 		id serial PRIMARY KEY,
 		short_url TEXT NOT NULL,
-		original_url TEXT NOT NULL
+		original_url TEXT NOT NULL,
+		user_id uuid
 	);
-	CREATE UNIQUE INDEX IF NOT EXISTS urls_original_url ON urls(original_url);
+	CREATE UNIQUE INDEX IF NOT EXISTS urls_original_url ON urls(original_url, user_id);
 `
 
 type DatabaseStore struct {
@@ -46,13 +46,13 @@ func (store *DatabaseStore) Initialize() error {
 func (store *DatabaseStore) Save(ctx context.Context, originalURL string) (string, error) {
 	shortURL := util.RandomString(8)
 	query := `
-		INSERT INTO urls (short_url, original_url) VALUES ($1, $2)
-		ON CONFLICT (original_url) DO UPDATE
+		INSERT INTO urls (short_url, original_url, user_id) VALUES ($1, $2, $3)
+		ON CONFLICT (original_url, user_id) DO UPDATE
 		SET original_url = EXCLUDED.original_url
 		RETURNING short_url;
 	`
 	var existingShortURL string
-	err := store.DB.QueryRowContext(ctx, query, shortURL, originalURL).Scan(&existingShortURL)
+	err := store.DB.QueryRowContext(ctx, query, shortURL, originalURL, config.CurrentUserID).Scan(&existingShortURL)
 	if err != nil {
 		return "", err
 	}
@@ -77,8 +77,8 @@ func (store *DatabaseStore) SaveBatch(ctx context.Context, urlStore *[]URLStore)
 		resultItem.ShortURL = config.Current.BaseURL + "/" + item.ShortURL
 		resultURLs = append(resultURLs, resultItem)
 
-		_, err := tx.ExecContext(ctx, `INSERT INTO urls (short_url, original_url) VALUES ($1, $2)`,
-			item.ShortURL, item.OriginalURL)
+		_, err := tx.ExecContext(ctx, `INSERT INTO urls (short_url, original_url, user_id) VALUES ($1, $2, $3)`,
+			item.ShortURL, item.OriginalURL, config.CurrentUserID)
 		if err != nil {
 			return nil, err
 		}
@@ -102,6 +102,30 @@ func (store *DatabaseStore) Get(ctx context.Context, key string) (string, error)
 		return "", err
 	}
 	return originalURL, nil
+}
+
+func (store *DatabaseStore) Index(ctx context.Context) ([]URLStore, error) {
+	query := `SELECT short_url, original_url FROM urls WHERE user_id = $1`
+	rows, err := store.DB.QueryContext(ctx, query, config.CurrentUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var resultURLs []URLStore
+	for rows.Next() {
+		var storeItem URLStore
+		err = rows.Scan(&storeItem.ShortURL, &storeItem.OriginalURL)
+		storeItem.ShortURL = config.Current.BaseURL + "/" + storeItem.ShortURL
+		if err != nil {
+			return resultURLs, err
+		}
+		resultURLs = append(resultURLs, storeItem)
+	}
+	if err = rows.Err(); err != nil {
+		return resultURLs, err
+	}
+	return resultURLs, nil
 }
 
 func (err ConflictError) Error() string {

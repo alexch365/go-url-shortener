@@ -15,12 +15,14 @@ func router() chi.Router {
 	r := chi.NewRouter()
 	r.Use(logger.Middleware)
 	r.Use(gzipMiddleware)
+	r.Use(authMiddleware)
 
 	r.Route("/", func(r chi.Router) {
 		r.Get("/ping", handlers.PingDatabase)
 		r.Post("/", handlers.Shorten)
 		r.Post("/api/shorten", handlers.ShortenAPI)
 		r.Post("/api/shorten/batch", handlers.ShortenAPIBatch)
+		r.Get("/api/user/urls", handlers.APIUserURLs)
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", handlers.Expand)
 		})

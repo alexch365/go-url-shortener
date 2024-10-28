@@ -16,6 +16,7 @@ type (
 		Get(ctx context.Context, key string) (string, error)
 		Save(ctx context.Context, originalURL string) (string, error)
 		SaveBatch(ctx context.Context, store *[]URLStore) ([]URLStore, error)
+		Index(ctx context.Context) ([]URLStore, error)
 	}
 	URLStore struct {
 		UUID          int    `json:"uuid,omitempty" db:"-"`
@@ -99,4 +100,12 @@ func (store *MemoryStore) Get(_ context.Context, key string) (string, error) {
 		}
 	}
 	return "", errors.New("key not found")
+}
+
+func (store *MemoryStore) Index(_ context.Context) ([]URLStore, error) {
+	result := store.urls
+	for _, item := range result {
+		item.ShortURL = config.Current.BaseURL + "/" + item.ShortURL
+	}
+	return result, nil
 }

@@ -113,6 +113,19 @@ func ShortenAPIBatch(w http.ResponseWriter, req *http.Request) {
 	util.JSONResponse(w, responseStore, http.StatusCreated)
 }
 
+func APIUserURLs(w http.ResponseWriter, req *http.Request) {
+	urls, err := StoreHandler.Index(req.Context())
+	if err != nil {
+		util.JSONResponse(w, apiResponse{Error: err.Error()}, http.StatusBadRequest)
+		return
+	}
+	status := http.StatusOK
+	if len(urls) == 0 {
+		status = http.StatusUnauthorized
+	}
+	util.JSONResponse(w, urls, status)
+}
+
 func Expand(w http.ResponseWriter, req *http.Request) {
 	urlID := strings.TrimPrefix(req.URL.Path, "/")
 	storedURL, err := StoreHandler.Get(req.Context(), urlID)
