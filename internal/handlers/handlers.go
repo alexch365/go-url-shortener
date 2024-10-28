@@ -121,7 +121,7 @@ func APIUserURLs(w http.ResponseWriter, req *http.Request) {
 	}
 	status := http.StatusOK
 	if len(urls) == 0 {
-		status = http.StatusNoContent
+		status = http.StatusUnauthorized
 	}
 	util.JSONResponse(w, urls, status)
 }

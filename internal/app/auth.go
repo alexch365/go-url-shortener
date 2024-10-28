@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/alexch365/go-url-shortener/internal/config"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"net/http"
@@ -48,6 +49,7 @@ func readCookie(cookie *http.Cookie) bool {
 	if err != nil || !token.Valid {
 		return false
 	}
+	config.CurrentUserID = currentClaims.UserID
 	return true
 }
 
@@ -56,14 +58,14 @@ func authMiddleware(next http.Handler) http.Handler {
 		cookie, err := r.Cookie(cookieName)
 		readSuccess := readCookie(cookie)
 
-		if err == nil && readSuccess && currentClaims.UserID == "" {
+		if err == nil && readSuccess && config.CurrentUserID == "" {
 			http.Error(w, "No UserID in token", http.StatusUnauthorized)
 			return
 		}
 
 		if err != nil || !readSuccess {
-			userID := generateUserID()
-			token, err := createToken(userID)
+			config.CurrentUserID = generateUserID()
+			token, err := createToken(config.CurrentUserID)
 			if err != nil {
 				http.Error(w, "Could not create token", http.StatusInternalServerError)
 				return
