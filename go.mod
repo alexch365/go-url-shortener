@@ -5,8 +5,9 @@ go 1.22.5
 require (
 	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/go-chi/chi/v5 v5.1.0
+	github.com/golang-jwt/jwt/v5 v5.2.1
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.1
-	github.com/jmoiron/sqlx v1.4.0
 	github.com/stretchr/testify v1.9.0
 	go.uber.org/zap v1.27.0
 )

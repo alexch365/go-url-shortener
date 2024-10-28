@@ -104,6 +104,30 @@ func (store *DatabaseStore) Get(ctx context.Context, key string) (string, error)
 	return originalURL, nil
 }
 
+func (store *DatabaseStore) Index(ctx context.Context) ([]URLStore, error) {
+	query := `SELECT short_url, original_url FROM urls`
+	rows, err := store.DB.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var resultURLs []URLStore
+	for rows.Next() {
+		var storeItem URLStore
+		err = rows.Scan(&storeItem.ShortURL, &storeItem.OriginalURL)
+		storeItem.ShortURL = config.Current.BaseURL + "/" + storeItem.ShortURL
+		if err != nil {
+			return resultURLs, err
+		}
+		resultURLs = append(resultURLs, storeItem)
+	}
+	if err = rows.Err(); err != nil {
+		return resultURLs, err
+	}
+	return resultURLs, nil
+}
+
 func (err ConflictError) Error() string {
 	return fmt.Sprintf("Original URL already exists with short URL: %s", err.ShortURL)
 }
