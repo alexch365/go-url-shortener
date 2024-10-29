@@ -126,16 +126,32 @@ func APIUserURLs(w http.ResponseWriter, req *http.Request) {
 	util.JSONResponse(w, urls, status)
 }
 
+func APIDeleteUserURLs(w http.ResponseWriter, req *http.Request) {
+	var ids []string
+	if err := json.NewDecoder(req.Body).Decode(&ids); err != nil {
+		util.JSONResponse(w, apiResponse{Error: "Invalid request format."}, http.StatusBadRequest)
+		return
+	}
+	err := StoreHandler.BatchDelete(req.Context(), ids)
+	if err != nil {
+		util.JSONResponse(w, apiResponse{Error: err.Error()}, http.StatusBadRequest)
+	}
+	util.JSONResponse(w, nil, http.StatusAccepted)
+}
+
 func Expand(w http.ResponseWriter, req *http.Request) {
 	urlID := strings.TrimPrefix(req.URL.Path, "/")
-	storedURL, err := StoreHandler.Get(req.Context(), urlID)
+	urlStore, err := StoreHandler.Get(req.Context(), urlID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid ID: %s", urlID), http.StatusNotFound)
 		return
 	}
-
-	w.Header().Set("Location", storedURL)
-	w.WriteHeader(http.StatusTemporaryRedirect)
+	if urlStore.DeletedFlag {
+		w.WriteHeader(http.StatusGone)
+	} else {
+		w.Header().Set("Location", urlStore.OriginalURL)
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	}
 }
 
 func parseURLFromBody(body io.ReadCloser) (string, error) {

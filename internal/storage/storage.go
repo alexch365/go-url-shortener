@@ -13,16 +13,18 @@ import (
 type (
 	StoreHandler interface {
 		Initialize() error
-		Get(ctx context.Context, key string) (string, error)
+		Get(ctx context.Context, key string) (URLStore, error)
 		Save(ctx context.Context, originalURL string) (string, error)
 		SaveBatch(ctx context.Context, store *[]URLStore) ([]URLStore, error)
 		Index(ctx context.Context) ([]URLStore, error)
+		BatchDelete(ctx context.Context, urls []string) error
 	}
 	URLStore struct {
 		UUID          int    `json:"uuid,omitempty" db:"-"`
 		CorrelationID string `json:"correlation_id,omitempty" db:"-"`
 		ShortURL      string `json:"short_url" db:"short_url"`
 		OriginalURL   string `json:"original_url" db:"original_url"`
+		DeletedFlag   bool   `json:"-" db:"is_deleted"`
 	}
 	MemoryStore struct {
 		urls []URLStore
@@ -93,13 +95,13 @@ func (store *MemoryStore) SaveBatch(_ context.Context, urlStore *[]URLStore) ([]
 	return resultURLs, nil
 }
 
-func (store *MemoryStore) Get(_ context.Context, key string) (string, error) {
+func (store *MemoryStore) Get(_ context.Context, key string) (URLStore, error) {
 	for i := range store.urls {
 		if store.urls[i].ShortURL == key {
-			return store.urls[i].OriginalURL, nil
+			return store.urls[i], nil
 		}
 	}
-	return "", errors.New("key not found")
+	return URLStore{}, errors.New("key not found")
 }
 
 func (store *MemoryStore) Index(_ context.Context) ([]URLStore, error) {
@@ -108,4 +110,8 @@ func (store *MemoryStore) Index(_ context.Context) ([]URLStore, error) {
 		item.ShortURL = config.Current.BaseURL + "/" + item.ShortURL
 	}
 	return result, nil
+}
+
+func (store *MemoryStore) BatchDelete(_ context.Context, _ []string) error {
+	return nil
 }

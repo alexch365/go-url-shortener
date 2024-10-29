@@ -23,6 +23,7 @@ func router() chi.Router {
 		r.Post("/api/shorten", handlers.ShortenAPI)
 		r.Post("/api/shorten/batch", handlers.ShortenAPIBatch)
 		r.Get("/api/user/urls", handlers.APIUserURLs)
+		r.Delete("/api/user/urls", handlers.APIDeleteUserURLs)
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", handlers.Expand)
 		})
