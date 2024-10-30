@@ -22,7 +22,7 @@ var schema = `
 		short_url TEXT NOT NULL,
 		original_url TEXT NOT NULL,
 		user_id uuid,
-		is_deleted boolean NOT NULL
+		is_deleted boolean NOT NULL default false
 	);
 	CREATE UNIQUE INDEX IF NOT EXISTS urls_original_url ON urls(original_url, user_id);
 `
