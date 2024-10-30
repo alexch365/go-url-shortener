@@ -83,7 +83,7 @@ func TestShortenAPI(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
+			request := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(tt.body))
 			rec := httptest.NewRecorder()
 			ShortenAPI(rec, request)
 			resp := rec.Result()
@@ -163,7 +163,7 @@ func TestShortenAPIBatch(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
+			request := httptest.NewRequest(http.MethodPost, "/api/shorten/batch", strings.NewReader(tt.body))
 			rec := httptest.NewRecorder()
 			ShortenAPIBatch(rec, request)
 			resp := rec.Result()
@@ -185,6 +185,42 @@ func TestShortenAPIBatch(t *testing.T) {
 				require.NoError(t, err)
 				assert.Regexp(t, tt.error.Error, resBody.Error)
 			}
+		})
+	}
+}
+
+func TestAPIUserURLs(t *testing.T) {
+	config.SetDefaults()
+	StoreHandler = &storage.MemoryStore{}
+	store := []storage.URLStore{
+		{OriginalURL: "https://practicum.yandex.ru", ShortURL: util.RandomString(8)},
+		{OriginalURL: "https://ya.ru", ShortURL: util.RandomString(8)},
+	}
+	_, _ = StoreHandler.SaveBatch(context.TODO(), &store)
+	tests := []struct {
+		name     string
+		response []storage.URLStore
+		error    apiResponse
+		status   int
+	}{
+		{
+			"",
+			store,
+			apiResponse{},
+			http.StatusOK,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/api/user/urls", strings.NewReader(""))
+			rec := httptest.NewRecorder()
+			APIUserURLs(rec, request)
+			resp := rec.Result()
+			defer resp.Body.Close()
+
+			err := json.NewDecoder(resp.Body).Decode(&tt.response)
+			require.NoError(t, err)
+			assert.Equal(t, tt.status, resp.StatusCode)
 		})
 	}
 }
