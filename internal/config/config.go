@@ -15,7 +15,6 @@ var defaults = appConfig{
 }
 
 var Current = appConfig{}
-var CurrentUserID string
 
 func SetDefaults() {
 	if Current.ServerAddress == "" {

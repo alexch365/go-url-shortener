@@ -1,8 +1,8 @@
 package app
 
 import (
+	"context"
 	"fmt"
-	"github.com/alexch365/go-url-shortener/internal/config"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"net/http"
@@ -14,26 +14,28 @@ type Claims struct {
 	UserID string
 }
 
-var currentClaims Claims
-
 const (
 	jwtSecret  = "55c21cba3f534ae292ab2cc6921e6bc7"
 	cookieName = "shortener_token"
 	tokenExp   = 3 * time.Hour
 )
 
-func createToken(userID string) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
+func NewClaims() *Claims {
+	return &Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenExp)),
 		},
-		UserID: userID,
-	})
+		UserID: uuid.New().String(),
+	}
+}
+
+func (claims *Claims) writeToken() (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(jwtSecret))
 }
 
-func parseToken(tokenString string) (*jwt.Token, error) {
-	return jwt.ParseWithClaims(tokenString, &currentClaims, func(token *jwt.Token) (interface{}, error) {
+func (claims *Claims) parseToken(tokenString string) (*jwt.Token, error) {
+	return jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -41,49 +43,39 @@ func parseToken(tokenString string) (*jwt.Token, error) {
 	})
 }
 
-func readCookie(cookie *http.Cookie) bool {
-	if cookie == nil {
-		return false
+func setCookie(w http.ResponseWriter, claims *Claims) {
+	token, err := claims.writeToken()
+	if err != nil {
+		http.Error(w, "Could not create token", http.StatusInternalServerError)
+		return
 	}
-	token, err := parseToken(cookie.Value)
-	if err != nil || !token.Valid {
-		return false
-	}
-	config.CurrentUserID = currentClaims.UserID
-	return true
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     cookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Expires:  time.Now().Add(tokenExp),
+	})
 }
 
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims := NewClaims()
 		cookie, err := r.Cookie(cookieName)
-		readSuccess := readCookie(cookie)
-
-		if err == nil && readSuccess && config.CurrentUserID == "" {
-			http.Error(w, "No UserID in token", http.StatusUnauthorized)
-			return
-		}
-
-		if err != nil || !readSuccess {
-			config.CurrentUserID = generateUserID()
-			token, err := createToken(config.CurrentUserID)
-			if err != nil {
-				http.Error(w, "Could not create token", http.StatusInternalServerError)
+		if err != nil {
+			setCookie(w, claims)
+		} else {
+			token, err := claims.parseToken(cookie.Value)
+			if err != nil || !token.Valid {
+				setCookie(w, claims)
+			} else if claims.UserID == "" {
+				http.Error(w, "No UserID in token", http.StatusUnauthorized)
 				return
 			}
-
-			http.SetCookie(w, &http.Cookie{
-				Name:     cookieName,
-				Value:    token,
-				Path:     "/",
-				HttpOnly: true,
-				Expires:  time.Now().Add(tokenExp),
-			})
 		}
 
-		next.ServeHTTP(w, r)
+		ctx := context.WithValue(r.Context(), "current_user_id", claims.UserID)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-func generateUserID() string {
-	return uuid.New().String()
 }

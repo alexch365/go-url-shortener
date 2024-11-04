@@ -59,7 +59,8 @@ func (store *DatabaseStore) Save(ctx context.Context, originalURL string) (strin
 		RETURNING short_url;
 	`
 	var existingShortURL string
-	err := store.DB.QueryRowContext(ctx, query, shortURL, originalURL, config.CurrentUserID).Scan(&existingShortURL)
+	userID := ctx.Value("current_user_id").(string)
+	err := store.DB.QueryRowContext(ctx, query, shortURL, originalURL, userID).Scan(&existingShortURL)
 	if err != nil {
 		return "", err
 	}
@@ -78,6 +79,7 @@ func (store *DatabaseStore) SaveBatch(ctx context.Context, urlStore *[]URLStore)
 	defer tx.Rollback()
 
 	var resultURLs []URLStore
+	userID := ctx.Value("current_user_id").(string)
 	for _, item := range *urlStore {
 		item.ShortURL = util.RandomString(8)
 		resultItem := item
@@ -85,7 +87,7 @@ func (store *DatabaseStore) SaveBatch(ctx context.Context, urlStore *[]URLStore)
 		resultURLs = append(resultURLs, resultItem)
 
 		_, err := tx.ExecContext(ctx, `INSERT INTO urls (short_url, original_url, user_id) VALUES ($1, $2, $3)`,
-			item.ShortURL, item.OriginalURL, config.CurrentUserID)
+			item.ShortURL, item.OriginalURL, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -113,7 +115,8 @@ func (store *DatabaseStore) Get(ctx context.Context, key string) (URLStore, erro
 
 func (store *DatabaseStore) Index(ctx context.Context) ([]URLStore, error) {
 	query := `SELECT short_url, original_url FROM urls WHERE user_id = $1`
-	rows, err := store.DB.QueryContext(ctx, query, config.CurrentUserID)
+	userID := ctx.Value("current_user_id").(string)
+	rows, err := store.DB.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +168,8 @@ func (store *DatabaseStore) BatchDelete(ctx context.Context, urls []string) erro
 
 func (store *DatabaseStore) processBatchDelete(ctx context.Context, ids []string) error {
 	query := `UPDATE urls SET is_deleted = true WHERE short_url = ANY($1) AND user_id = $2`
-	_, err := store.DB.ExecContext(ctx, query, ids, config.CurrentUserID)
+	userID := ctx.Value("current_user_id").(string)
+	_, err := store.DB.ExecContext(ctx, query, ids, userID)
 	return err
 }
 
