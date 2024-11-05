@@ -27,3 +27,7 @@ func SetDefaults() {
 		Current.FileStoragePath = defaults.FileStoragePath
 	}
 }
+
+func URLFor(path string) string {
+	return Current.BaseURL + "/" + path
+}

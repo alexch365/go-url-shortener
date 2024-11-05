@@ -1,4 +1,4 @@
-package app
+package middleware
 
 import (
 	"compress/gzip"
@@ -41,7 +41,7 @@ func (gr gzipReader) Read(p []byte) (n int, err error) {
 	return gr.gzr.Read(p)
 }
 
-func gzipMiddleware(next http.Handler) http.Handler {
+func GzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origRW := w
 

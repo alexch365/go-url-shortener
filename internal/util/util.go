@@ -2,8 +2,10 @@ package util
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -24,4 +26,12 @@ func JSONResponse(w http.ResponseWriter, response interface{}, status int) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func ParseURL(rawURL string) (string, error) {
+	parsedURL, err := url.ParseRequestURI(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid URL: %s", rawURL)
+	}
+	return parsedURL.String(), nil
 }

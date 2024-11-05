@@ -5,6 +5,7 @@ import (
 	"github.com/alexch365/go-url-shortener/internal/config"
 	"github.com/alexch365/go-url-shortener/internal/handlers"
 	"github.com/alexch365/go-url-shortener/internal/logger"
+	"github.com/alexch365/go-url-shortener/internal/middleware"
 	"github.com/alexch365/go-url-shortener/internal/storage"
 	"github.com/caarlos0/env"
 	"github.com/go-chi/chi/v5"
@@ -14,13 +15,16 @@ import (
 func router() chi.Router {
 	r := chi.NewRouter()
 	r.Use(logger.Middleware)
-	r.Use(gzipMiddleware)
+	r.Use(middleware.GzipMiddleware)
+	r.Use(middleware.AuthMiddleware)
 
 	r.Route("/", func(r chi.Router) {
 		r.Get("/ping", handlers.PingDatabase)
 		r.Post("/", handlers.Shorten)
 		r.Post("/api/shorten", handlers.ShortenAPI)
 		r.Post("/api/shorten/batch", handlers.ShortenAPIBatch)
+		r.Get("/api/user/urls", handlers.APIUserURLs)
+		r.Delete("/api/user/urls", handlers.APIDeleteUserURLs)
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", handlers.Expand)
 		})
