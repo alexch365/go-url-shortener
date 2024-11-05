@@ -77,7 +77,7 @@ func (store *MemoryStore) Get(_ context.Context, key string) (models.URLStore, e
 func (store *MemoryStore) Index(_ context.Context) ([]models.URLStore, error) {
 	result := store.urls
 	for _, item := range result {
-		item.ShortURL = config.Current.BaseURL + "/" + item.ShortURL
+		item.ShortURL = config.URLFor(item.ShortURL)
 	}
 	return result, nil
 }

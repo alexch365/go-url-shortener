@@ -92,10 +92,11 @@ func (store *DatabaseStore) Index(ctx context.Context) ([]models.URLStore, error
 	for rows.Next() {
 		var storeItem models.URLStore
 		err = rows.Scan(&storeItem.ShortURL, &storeItem.OriginalURL)
+		storeItem.ShortURL = config.URLFor(storeItem.ShortURL)
 		if err != nil {
 			return resultURLs, err
 		}
-		resultURLs = append(resultURLs, models.URLStore{ShortURL: config.URLFor(storeItem.ShortURL)})
+		resultURLs = append(resultURLs, storeItem)
 	}
 	if err = rows.Err(); err != nil {
 		return resultURLs, err
