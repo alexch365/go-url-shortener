@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/alexch365/go-url-shortener/internal/config"
+	"github.com/alexch365/go-url-shortener/internal/models"
+	"github.com/alexch365/go-url-shortener/internal/services"
 	"github.com/alexch365/go-url-shortener/internal/storage"
 	"github.com/alexch365/go-url-shortener/internal/util"
 	"io"
@@ -65,13 +67,13 @@ func TestShortenAPI(t *testing.T) {
 		{
 			"with invalid URL",
 			`{"url": "https//practicum.yandex.ru"}`,
-			apiResponse{Error: "Invalid URL: .*"},
+			apiResponse{Error: "invalid URL: .*"},
 			http.StatusBadRequest,
 		},
 		{
 			"with incorrect JSON key",
 			`{"uri": "https://practicum.yandex.ru"}`,
-			apiResponse{Error: "Invalid URL: .*"},
+			apiResponse{Error: "invalid URL: .*"},
 			http.StatusBadRequest,
 		},
 		{
@@ -111,7 +113,7 @@ func TestShortenAPIBatch(t *testing.T) {
 	tests := []struct {
 		name     string
 		body     string
-		response []storage.URLStore
+		response []models.URLStore
 		error    apiResponse
 		status   int
 	}{
@@ -127,7 +129,7 @@ func TestShortenAPIBatch(t *testing.T) {
 					  "original_url": "https://ya.ru"
 					}
 				]`,
-			[]storage.URLStore{
+			[]models.URLStore{
 				{CorrelationID: "30d53d47-6d08-41ce-992f-097b0f01479b", ShortURL: "http://localhost:8080/.{8}$"},
 				{CorrelationID: "c65f7a7b-770d-4a59-97d2-946bcdfa2589", ShortURL: "http://localhost:8080/.{8}$"},
 			},
@@ -142,21 +144,21 @@ func TestShortenAPIBatch(t *testing.T) {
 					  "original_url": "https//practicum.yandex.ru"
 					}
 				]`,
-			[]storage.URLStore{},
-			apiResponse{Error: "Invalid URL: .*"},
+			[]models.URLStore{},
+			apiResponse{Error: "invalid URL: .*"},
 			http.StatusBadRequest,
 		},
 		{
 			"with incorrect JSON key",
 			`[{"uri": "https://practicum.yandex.ru"}]`,
-			[]storage.URLStore{},
-			apiResponse{Error: "Invalid URL: .*"},
+			[]models.URLStore{},
+			apiResponse{Error: "invalid URL: .*"},
 			http.StatusBadRequest,
 		},
 		{
 			"with string request",
 			"https://practicum.yandex.ru",
-			[]storage.URLStore{},
+			[]models.URLStore{},
 			apiResponse{Error: "Invalid request format."},
 			http.StatusBadRequest,
 		},
@@ -172,7 +174,7 @@ func TestShortenAPIBatch(t *testing.T) {
 			assert.Equal(t, tt.status, resp.StatusCode)
 			switch resp.StatusCode {
 			case http.StatusCreated:
-				var resBody []storage.URLStore
+				var resBody []models.URLStore
 				err := json.NewDecoder(resp.Body).Decode(&resBody)
 				require.NoError(t, err)
 				for i, res := range tt.response {
@@ -192,14 +194,14 @@ func TestShortenAPIBatch(t *testing.T) {
 func TestAPIUserURLs(t *testing.T) {
 	config.SetDefaults()
 	StoreHandler = &storage.MemoryStore{}
-	store := []storage.URLStore{
+	store := []models.URLStore{
 		{OriginalURL: "https://practicum.yandex.ru", ShortURL: util.RandomString(8)},
 		{OriginalURL: "https://ya.ru", ShortURL: util.RandomString(8)},
 	}
-	_, _ = StoreHandler.SaveBatch(context.TODO(), &store)
+	_, _ = services.BatchCreate(StoreHandler, context.TODO(), &store)
 	tests := []struct {
 		name     string
-		response []storage.URLStore
+		response []models.URLStore
 		error    apiResponse
 		status   int
 	}{
