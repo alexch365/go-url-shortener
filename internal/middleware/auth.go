@@ -1,4 +1,4 @@
-package app
+package middleware
 
 import (
 	"context"
@@ -14,10 +14,13 @@ type Claims struct {
 	UserID string
 }
 
+type userCtxKeyType string
+
 const (
-	jwtSecret  = "55c21cba3f534ae292ab2cc6921e6bc7"
-	cookieName = "shortener_token"
-	tokenExp   = 3 * time.Hour
+	jwtSecret                 = "55c21cba3f534ae292ab2cc6921e6bc7"
+	cookieName                = "shortener_token"
+	tokenExp                  = 3 * time.Hour
+	userCtxKey userCtxKeyType = "user_id"
 )
 
 func NewClaims() *Claims {
@@ -59,7 +62,11 @@ func setCookie(w http.ResponseWriter, claims *Claims) {
 	})
 }
 
-func authMiddleware(next http.Handler) http.Handler {
+func withUserID(r *http.Request, userID string) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), userCtxKey, userID))
+}
+
+func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims := NewClaims()
 		cookie, err := r.Cookie(cookieName)
@@ -75,7 +82,14 @@ func authMiddleware(next http.Handler) http.Handler {
 			}
 		}
 
-		ctx := context.WithValue(r.Context(), "current_user_id", claims.UserID)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, withUserID(r, claims.UserID))
 	})
+}
+
+func GetUserID(ctx context.Context) string {
+	userID, ok := ctx.Value(userCtxKey).(string)
+	if !ok {
+		return ""
+	}
+	return userID
 }

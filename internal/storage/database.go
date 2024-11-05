@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/alexch365/go-url-shortener/internal/config"
+	"github.com/alexch365/go-url-shortener/internal/middleware"
 	"github.com/alexch365/go-url-shortener/internal/util"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"golang.org/x/sync/errgroup"
@@ -59,8 +60,7 @@ func (store *DatabaseStore) Save(ctx context.Context, originalURL string) (strin
 		RETURNING short_url;
 	`
 	var existingShortURL string
-	userID := ctx.Value("current_user_id").(string)
-	err := store.DB.QueryRowContext(ctx, query, shortURL, originalURL, userID).Scan(&existingShortURL)
+	err := store.DB.QueryRowContext(ctx, query, shortURL, originalURL, middleware.GetUserID(ctx)).Scan(&existingShortURL)
 	if err != nil {
 		return "", err
 	}
@@ -79,7 +79,7 @@ func (store *DatabaseStore) SaveBatch(ctx context.Context, urlStore *[]URLStore)
 	defer tx.Rollback()
 
 	var resultURLs []URLStore
-	userID := ctx.Value("current_user_id").(string)
+	userID := middleware.GetUserID(ctx)
 	for _, item := range *urlStore {
 		item.ShortURL = util.RandomString(8)
 		resultItem := item
@@ -115,7 +115,7 @@ func (store *DatabaseStore) Get(ctx context.Context, key string) (URLStore, erro
 
 func (store *DatabaseStore) Index(ctx context.Context) ([]URLStore, error) {
 	query := `SELECT short_url, original_url FROM urls WHERE user_id = $1`
-	userID := ctx.Value("current_user_id").(string)
+	userID := middleware.GetUserID(ctx)
 	rows, err := store.DB.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, err
@@ -168,8 +168,7 @@ func (store *DatabaseStore) BatchDelete(ctx context.Context, urls []string) erro
 
 func (store *DatabaseStore) processBatchDelete(ctx context.Context, ids []string) error {
 	query := `UPDATE urls SET is_deleted = true WHERE short_url = ANY($1) AND user_id = $2`
-	userID := ctx.Value("current_user_id").(string)
-	_, err := store.DB.ExecContext(ctx, query, ids, userID)
+	_, err := store.DB.ExecContext(ctx, query, ids, middleware.GetUserID(ctx))
 	return err
 }
 
